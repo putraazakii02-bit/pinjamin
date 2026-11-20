@@ -14,4 +14,4 @@ Route::post('/auth/logout', [AuthController::class, 'logout'])->middleware('auth
 
 Route::get('/user', function (Request $request) {
     return $request->user();
-})->middleware('auth:sanctum');
+})->middleware(['auth:sanctum', 'active.account']);
