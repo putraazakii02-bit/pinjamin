@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
 
 Route::get('/categories', [CategoryController::class, 'index']);
@@ -16,6 +17,16 @@ Route::prefix('admin')
         Route::post('/categories', [AdminCategoryController::class, 'store']);
         Route::patch('/categories/{category}', [AdminCategoryController::class, 'update']);
         Route::patch('/categories/{category}/status', [AdminCategoryController::class, 'updateStatus']);
+    });
+
+Route::middleware(['auth:sanctum', 'active.account'])
+    ->group(function (): void {
+        Route::get('/items', [ItemController::class, 'index']);
+        Route::get('/my/items', [ItemController::class, 'myItems']);
+        Route::post('/items', [ItemController::class, 'store']);
+        Route::get('/items/{item}', [ItemController::class, 'show']);
+        Route::patch('/items/{item}', [ItemController::class, 'update']);
+        Route::delete('/items/{item}', [ItemController::class, 'destroy']);
     });
 
 Route::post('/auth/register', [AuthController::class, 'register'])->middleware('throttle:5,1,auth-register');
