@@ -19,6 +19,7 @@ class ItemController extends Controller
         return ItemResource::collection(
             Item::query()
                 ->where('listing_status', 'active')
+                ->with(['images' => fn ($query) => $query->orderBy('sort_order')->orderBy('id')])
                 ->orderByDesc('id')
                 ->get()
         );
@@ -29,6 +30,7 @@ class ItemController extends Controller
         return ItemResource::collection(
             Item::query()
                 ->where('owner_id', $request->user()->getAuthIdentifier())
+                ->with(['images' => fn ($query) => $query->orderBy('sort_order')->orderBy('id')])
                 ->orderByDesc('id')
                 ->get()
         );
@@ -41,6 +43,8 @@ class ItemController extends Controller
             abort(404);
         }
 
+        $item->load(['images' => fn ($query) => $query->orderBy('sort_order')->orderBy('id')]);
+
         return new ItemResource($item);
     }
 
@@ -51,6 +55,7 @@ class ItemController extends Controller
             'owner_id' => $request->user()->getAuthIdentifier(),
             'listing_status' => 'active',
         ]);
+        $item->load('images');
 
         return (new ItemResource($item))
             ->response()
@@ -61,6 +66,7 @@ class ItemController extends Controller
     {
         $this->ensureOwner($request, $item);
         $item->update($request->validated());
+        $item->load(['images' => fn ($query) => $query->orderBy('sort_order')->orderBy('id')]);
 
         return new ItemResource($item);
     }
