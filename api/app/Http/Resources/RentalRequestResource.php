@@ -18,6 +18,7 @@ class RentalRequestResource extends JsonResource
             'borrower_id' => $this->borrower_id,
             'request_message' => $this->request_message,
             'status' => $this->status,
+            'cancelled_at' => $this->cancelled_at,
             'created_at' => $this->created_at,
             'negotiations' => $this->whenLoaded(
                 'negotiations',

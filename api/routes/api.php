@@ -31,6 +31,7 @@ Route::middleware(['auth:sanctum', 'active.account'])
         Route::patch('/items/{item}', [ItemController::class, 'update']);
         Route::delete('/items/{item}', [ItemController::class, 'destroy']);
         Route::post('/items/{item}/rental-requests', [RentalRequestController::class, 'store']);
+        Route::patch('/rental-requests/{rentalRequest}/cancel', [RentalRequestController::class, 'cancel']);
         Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/accept', [RentalNegotiationController::class, 'accept']);
         Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/counter', [RentalNegotiationController::class, 'counter']);
         Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/reject', [RentalNegotiationController::class, 'reject']);
