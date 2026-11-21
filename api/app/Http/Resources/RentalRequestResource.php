@@ -19,9 +19,19 @@ class RentalRequestResource extends JsonResource
             'request_message' => $this->request_message,
             'status' => $this->status,
             'created_at' => $this->created_at,
+            'negotiations' => $this->whenLoaded(
+                'negotiations',
+                fn ($negotiations) => RentalNegotiationResource::collection($negotiations)
+            ),
             'initial_negotiation' => $this->whenLoaded(
                 'negotiations',
                 fn ($negotiations) => new RentalNegotiationResource($negotiations->first())
+            ),
+            'transaction' => $this->whenLoaded(
+                'transaction',
+                fn ($transaction) => $transaction
+                    ? new RentalTransactionResource($transaction)
+                    : null
             ),
         ];
     }

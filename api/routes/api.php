@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\ItemImageController;
+use App\Http\Controllers\Api\RentalNegotiationController;
 use App\Http\Controllers\Api\RentalRequestController;
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
 
@@ -30,6 +31,9 @@ Route::middleware(['auth:sanctum', 'active.account'])
         Route::patch('/items/{item}', [ItemController::class, 'update']);
         Route::delete('/items/{item}', [ItemController::class, 'destroy']);
         Route::post('/items/{item}/rental-requests', [RentalRequestController::class, 'store']);
+        Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/accept', [RentalNegotiationController::class, 'accept']);
+        Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/counter', [RentalNegotiationController::class, 'counter']);
+        Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/reject', [RentalNegotiationController::class, 'reject']);
         Route::post('/items/{item}/images', [ItemImageController::class, 'store']);
         Route::delete('/items/{item}/images/{image}', [ItemImageController::class, 'destroy']);
         Route::patch('/items/{item}/images/{image}/primary', [ItemImageController::class, 'setPrimary']);
