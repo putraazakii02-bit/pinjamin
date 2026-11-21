@@ -20,9 +20,52 @@ class RentalRequestResource extends JsonResource
             'status' => $this->status,
             'cancelled_at' => $this->cancelled_at,
             'created_at' => $this->created_at,
+            'item' => $this->whenLoaded(
+                'item',
+                fn () => $this->item ? new ItemResource($this->item) : null
+            ),
+            'owner' => $this->whenLoaded(
+                'item',
+                function () {
+                    $item = $this->item;
+
+                    if (! $item || ! $item->relationLoaded('owner') || ! $item->owner) {
+                        return null;
+                    }
+
+                    return [
+                        'id' => $item->owner->id,
+                        'name' => $item->owner->name,
+                    ];
+                }
+            ),
+            'borrower' => $this->whenLoaded(
+                'borrower',
+                fn () => $this->borrower
+                    ? [
+                        'id' => $this->borrower->id,
+                        'name' => $this->borrower->name,
+                    ]
+                    : null
+            ),
             'negotiations' => $this->whenLoaded(
                 'negotiations',
                 fn ($negotiations) => RentalNegotiationResource::collection($negotiations)
+            ),
+            'latest_negotiation' => $this->whenLoaded(
+                'negotiations',
+                function ($negotiations) {
+                    $latest = $negotiations
+                        ->sortBy([
+                            ['created_at', 'asc'],
+                            ['id', 'asc'],
+                        ])
+                        ->last();
+
+                    return $latest
+                        ? new RentalNegotiationResource($latest)
+                        : null;
+                }
             ),
             'initial_negotiation' => $this->whenLoaded(
                 'negotiations',

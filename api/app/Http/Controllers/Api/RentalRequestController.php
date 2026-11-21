@@ -9,10 +9,85 @@ use App\Models\Item;
 use App\Models\RentalNegotiation;
 use App\Models\RentalRequest;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\DB;
 
 class RentalRequestController extends Controller
 {
+    public function myRequests(Request $request): AnonymousResourceCollection
+    {
+        $requests = RentalRequest::query()
+            ->where('borrower_id', $request->user()->getAuthIdentifier())
+            ->with($this->listingRelations())
+            ->orderByDesc('id')
+            ->get();
+
+        return RentalRequestResource::collection($requests);
+    }
+
+    public function incomingRequests(Request $request): AnonymousResourceCollection
+    {
+        $requests = RentalRequest::query()
+            ->whereHas('item', function ($itemQuery) use ($request): void {
+                $itemQuery
+                    ->withTrashed()
+                    ->where('owner_id', $request->user()->getAuthIdentifier());
+            })
+            ->with($this->listingRelations())
+            ->orderByDesc('id')
+            ->get();
+
+        return RentalRequestResource::collection($requests);
+    }
+
+    public function show(Request $request, RentalRequest $rentalRequest): JsonResponse
+    {
+        $rentalRequest->load([
+            'item' => fn ($itemQuery) => $itemQuery
+                ->withTrashed()
+                ->with('owner'),
+            'borrower',
+            'negotiations' => fn ($query) => $query
+                ->orderBy('created_at')
+                ->orderBy('id'),
+            'transaction',
+        ]);
+
+        $borrowerId = (string) $rentalRequest->borrower_id;
+        $ownerId = $rentalRequest->item
+            ? (string) $rentalRequest->item->owner_id
+            : null;
+        $userId = (string) $request->user()->getAuthIdentifier();
+
+        abort_unless(
+            $borrowerId === $userId || $ownerId === $userId,
+            403,
+            'Anda bukan peminjam maupun pemilik barang dari Rental Request ini.'
+        );
+
+        return (new RentalRequestResource($rentalRequest))
+            ->response()
+            ->setStatusCode(200);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function listingRelations(): array
+    {
+        return [
+            'item' => fn ($itemQuery) => $itemQuery
+                ->withTrashed()
+                ->with('owner'),
+            'borrower',
+            'negotiations' => fn ($query) => $query
+                ->orderBy('created_at')
+                ->orderBy('id'),
+            'transaction',
+        ];
+    }
+
     public function store(StoreRentalRequestRequest $request, Item $item): JsonResponse
     {
         $borrower = $request->user();
