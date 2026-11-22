@@ -15,6 +15,9 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'amount',
     'proof_path',
     'payment_note',
+    'rejected_by',
+    'rejected_at',
+    'rejection_note',
 ])]
 class Payment extends Model
 {
@@ -24,6 +27,7 @@ class Payment extends Model
             'amount' => 'decimal:2',
             'reported_at' => 'datetime',
             'confirmed_at' => 'datetime',
+            'rejected_at' => 'datetime',
         ];
     }
 
@@ -45,5 +49,10 @@ class Payment extends Model
     public function confirmedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'confirmed_by');
+    }
+
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 }
