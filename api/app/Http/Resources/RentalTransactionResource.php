@@ -25,6 +25,8 @@ class RentalTransactionResource extends JsonResource
             'due_at' => $this->due_at,
             'owner_handover_confirmed_at' => $this->owner_handover_confirmed_at,
             'borrower_received_confirmed_at' => $this->borrower_received_confirmed_at,
+            'borrower_returned_at' => $this->borrower_returned_at,
+            'owner_return_received_at' => $this->owner_return_received_at,
             'status' => $this->status,
         ];
     }
