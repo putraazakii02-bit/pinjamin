@@ -180,6 +180,19 @@ class ItemApiTest extends TestCase
         ], 'mysql');
     }
 
+    public function test_admin_cannot_create_an_item(): void
+    {
+        $admin = $this->createUser('active', 'admin');
+        $category = $this->createCategory();
+        $itemsBefore = Item::on('mysql')->count();
+
+        $this->withToken($admin->createToken('item-api-test')->plainTextToken)
+            ->postJson('/api/items', $this->validPayload($category))
+            ->assertForbidden();
+
+        $this->assertSame($itemsBefore, Item::on('mysql')->count());
+    }
+
     public function test_forged_owner_id_does_not_change_item_ownership(): void
     {
         $user = $this->createUser();
@@ -286,6 +299,29 @@ class ItemApiTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_admin_cannot_update_or_delete_an_item_as_owner(): void
+    {
+        $admin = $this->createUser('active', 'admin');
+        $item = $this->createItem($admin, $this->createCategory());
+        $originalTitle = $item->title;
+        $token = $admin->createToken('item-api-test')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson('/api/items/'.$item->id, ['title' => 'Admin update'])
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->deleteJson('/api/items/'.$item->id)
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('items', [
+            'id' => $item->id,
+            'owner_id' => $admin->id,
+            'title' => $originalTitle,
+            'deleted_at' => null,
+        ], 'mysql');
+    }
+
     public function test_inactive_category_is_rejected_when_changing_category(): void
     {
         $owner = $this->createUser();
@@ -356,10 +392,11 @@ class ItemApiTest extends TestCase
             ->assertJsonMissing(['id' => $item->id]);
     }
 
-    private function createUser(string $accountStatus = 'active'): User
+    private function createUser(string $accountStatus = 'active', string $role = 'student'): User
     {
         $user = User::factory()->create();
         $user->account_status = $accountStatus;
+        $user->role = $role;
         $user->save();
 
         return $user;

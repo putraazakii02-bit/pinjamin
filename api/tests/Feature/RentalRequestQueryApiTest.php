@@ -110,6 +110,62 @@ class RentalRequestQueryApiTest extends TestCase
             ->assertJsonPath('data.owner.id', $owner->id);
     }
 
+    public function test_admin_cannot_access_request_listings_or_detail_as_a_party(): void
+    {
+        [, $adminBorrower, , $borrowerRequest] = $this->createRequestFixture(
+            'student',
+            'admin'
+        );
+        [$adminOwner, , , $ownerRequest] = $this->createRequestFixture(
+            'admin',
+            'student'
+        );
+
+        $this->actingAsToken($adminBorrower)
+            ->getJson('/api/my/rental-requests')
+            ->assertForbidden();
+        $this->getJson('/api/rental-requests/'.$borrowerRequest->id)
+            ->assertForbidden();
+
+        $this->actingAsToken($adminOwner)
+            ->getJson('/api/incoming/rental-requests')
+            ->assertForbidden();
+        $this->getJson('/api/rental-requests/'.$ownerRequest->id)
+            ->assertForbidden();
+    }
+
+    public function test_student_listings_and_details_exclude_requests_with_admin_parties(): void
+    {
+        [, $studentBorrower, , $adminOwnerRequest] = $this->createRequestFixture(
+            'admin',
+            'student'
+        );
+        [$studentOwner, , , $adminBorrowerRequest] = $this->createRequestFixture(
+            'student',
+            'admin'
+        );
+
+        $borrowerListing = $this->actingAsToken($studentBorrower)
+            ->getJson('/api/my/rental-requests')
+            ->assertOk();
+        $this->assertNotContains(
+            $adminOwnerRequest->id,
+            collect($borrowerListing->json('data'))->pluck('id')->all()
+        );
+        $this->getJson('/api/rental-requests/'.$adminOwnerRequest->id)
+            ->assertForbidden();
+
+        $ownerListing = $this->actingAsToken($studentOwner)
+            ->getJson('/api/incoming/rental-requests')
+            ->assertOk();
+        $this->assertNotContains(
+            $adminBorrowerRequest->id,
+            collect($ownerListing->json('data'))->pluck('id')->all()
+        );
+        $this->getJson('/api/rental-requests/'.$adminBorrowerRequest->id)
+            ->assertForbidden();
+    }
+
     public function test_outside_user_cannot_view_request_detail(): void
     {
         [$owner, $borrower, $item, $request] = $this->createRequestFixture();
@@ -343,21 +399,27 @@ class RentalRequestQueryApiTest extends TestCase
         $this->assertSame($item->id, $listedRequest['item']['id']);
     }
 
-    private function createRequestFixture(): array
+    private function createRequestFixture(
+        string $ownerRole = 'student',
+        string $borrowerRole = 'student'
+    ): array
     {
-        $owner = $this->createUser();
-        $borrower = $this->createUser();
+        $owner = $this->createUser('active', $ownerRole);
+        $borrower = $this->createUser('active', $borrowerRole);
         $item = $this->createItem($owner);
         $request = $this->createRequest($item, $borrower);
 
         return [$owner, $borrower, $item, $request];
     }
 
-    private function createUser(string $accountStatus = 'active'): User
+    private function createUser(
+        string $accountStatus = 'active',
+        string $role = 'student'
+    ): User
     {
         $user = User::factory()->create();
         $user->account_status = $accountStatus;
-        $user->role = 'student';
+        $user->role = $role;
         $user->save();
 
         return $user;

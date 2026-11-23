@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\RentalNegotiation;
 use App\Models\RentalRequest;
 use App\Models\RentalTransaction;
+use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -235,6 +236,7 @@ class RentalNegotiationController extends Controller
                 403,
                 'Hanya pemilik barang yang dapat menolak Rental Request.'
             );
+            $this->ensurePartyCanRespond($lockedRequest, $item, $user);
             $this->ensureUserIsReceivingOffer($pending, $user);
 
             $rejectedAt = now();
@@ -277,6 +279,19 @@ class RentalNegotiationController extends Controller
         Item $item,
         $user
     ): void {
+        $partyRoles = User::query()
+            ->whereKey([$item->owner_id, $rentalRequest->borrower_id])
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->pluck('role', 'id');
+
+        abort_unless(
+            $partyRoles->get($item->owner_id) === 'student'
+                && $partyRoles->get($rentalRequest->borrower_id) === 'student',
+            403,
+            'Hanya mahasiswa yang dapat bernegosiasi.'
+        );
+
         $userId = (string) $user->getAuthIdentifier();
         $isOwner = (string) $item->owner_id === $userId;
         $isBorrower = (string) $rentalRequest->borrower_id === $userId;

@@ -23,6 +23,8 @@ class RentalTransactionResource extends JsonResource
             'total_price' => $this->total_price,
             'start_at' => $this->start_at,
             'due_at' => $this->due_at,
+            'owner_handover_confirmed_at' => $this->owner_handover_confirmed_at,
+            'borrower_received_confirmed_at' => $this->borrower_received_confirmed_at,
             'status' => $this->status,
         ];
     }

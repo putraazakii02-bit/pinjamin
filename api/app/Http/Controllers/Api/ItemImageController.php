@@ -226,7 +226,8 @@ class ItemImageController extends Controller
     private function ensureOwner(Request $request, Item $item): void
     {
         abort_unless(
-            (string) $item->owner_id === (string) $request->user()->getAuthIdentifier(),
+            $request->user()->role === 'student'
+                && (string) $item->owner_id === (string) $request->user()->getAuthIdentifier(),
             403
         );
     }

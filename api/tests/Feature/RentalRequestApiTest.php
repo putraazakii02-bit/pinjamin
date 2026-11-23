@@ -60,6 +60,28 @@ class RentalRequestApiTest extends TestCase
             ->assertJsonPath('data.initial_negotiation.status', 'pending');
     }
 
+    public function test_student_cannot_request_an_admin_owned_item(): void
+    {
+        $borrower = $this->createUser();
+        $adminOwner = $this->createUser('active', 'admin');
+        $item = $this->createItem($adminOwner);
+
+        $this->postAs($borrower, $item)
+            ->assertForbidden()
+            ->assertJsonPath(
+                'message',
+                'Barang milik Admin tidak dapat diminta untuk dipinjam.'
+            );
+
+        $this->assertDatabaseMissing('rental_requests', [
+            'item_id' => $item->id,
+            'borrower_id' => $borrower->id,
+        ], 'mysql');
+        $this->assertSame(0, RentalNegotiation::on('mysql')
+            ->whereHas('rentalRequest', fn ($query) => $query->where('item_id', $item->id))
+            ->count());
+    }
+
     public function test_new_rental_request_has_pending_status(): void
     {
         $borrower = $this->createUser();

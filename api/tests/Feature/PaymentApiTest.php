@@ -239,6 +239,125 @@ class PaymentApiTest extends TestCase
         ], 'mysql');
     }
 
+    public function test_admin_borrower_cannot_report_payment(): void
+    {
+        [$owner, $borrower, $item, $request, $transaction] = $this->createPaymentFixture(
+            'student',
+            'admin'
+        );
+
+        $this->actingAsToken($borrower)
+            ->postJson($this->paymentsEndpoint($transaction), [
+                'payment_method' => 'cash',
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(
+            0,
+            Payment::on('mysql')->where('transaction_id', $transaction->id)->count()
+        );
+        $this->assertDatabaseHas('rental_transactions', [
+            'id' => $transaction->id,
+            'status' => 'awaiting_payment',
+        ], 'mysql');
+    }
+
+    public function test_admin_owner_cannot_confirm_reject_or_access_payment_data(): void
+    {
+        [$owner, $borrower, $item, $request, $transaction] = $this->createPaymentFixture();
+        $payment = $this->reportPayment($transaction, $borrower, 'cash');
+        $owner->role = 'admin';
+        $owner->save();
+
+        $this->actingAsToken($owner)
+            ->patchJson($this->paymentEndpoint($transaction, $payment, 'confirm'))
+            ->assertForbidden();
+        $this->actingAsToken($owner)
+            ->patchJson(
+                $this->paymentEndpoint($transaction, $payment, 'reject'),
+                ['rejection_note' => 'Admin rejection attempt.']
+            )
+            ->assertForbidden();
+        $this->actingAsToken($owner)
+            ->getJson($this->paymentsEndpoint($transaction))
+            ->assertForbidden();
+        $this->actingAsToken($owner)
+            ->get($this->proofEndpoint($transaction, $payment))
+            ->assertForbidden();
+
+        $payment->refresh();
+        $transaction->refresh();
+        $this->assertSame('reported', $payment->payment_status);
+        $this->assertNull($payment->confirmed_by);
+        $this->assertNull($payment->confirmed_at);
+        $this->assertNull($payment->rejected_by);
+        $this->assertNull($payment->rejected_at);
+        $this->assertSame('awaiting_payment_confirmation', $transaction->status);
+    }
+
+    public function test_student_borrower_cannot_report_payment_when_owner_is_admin(): void
+    {
+        [$owner, $borrower, $item, $request, $transaction] = $this->createPaymentFixture(
+            'admin',
+            'student'
+        );
+
+        $this->actingAsToken($borrower)
+            ->postJson($this->paymentsEndpoint($transaction), [
+                'payment_method' => 'cash',
+            ])
+            ->assertForbidden();
+
+        $this->assertSame(
+            0,
+            Payment::on('mysql')->where('transaction_id', $transaction->id)->count()
+        );
+        $this->assertDatabaseHas('rental_transactions', [
+            'id' => $transaction->id,
+            'status' => 'awaiting_payment',
+        ], 'mysql');
+    }
+
+    public function test_student_owner_cannot_manage_payment_when_borrower_is_admin(): void
+    {
+        [$owner, $borrower, $item, $request, $transaction] = $this->createPaymentFixture();
+        $payment = $this->reportPayment($transaction, $borrower, 'cash');
+        $borrower->role = 'admin';
+        $borrower->save();
+
+        $this->actingAsToken($borrower)
+            ->getJson($this->paymentsEndpoint($transaction))
+            ->assertForbidden();
+        $this->actingAsToken($borrower)
+            ->get($this->proofEndpoint($transaction, $payment))
+            ->assertForbidden();
+
+        $this->actingAsToken($owner)
+            ->patchJson($this->paymentEndpoint($transaction, $payment, 'confirm'))
+            ->assertForbidden();
+        $this->actingAsToken($owner)
+            ->patchJson(
+                $this->paymentEndpoint($transaction, $payment, 'reject'),
+                ['rejection_note' => 'Student owner with admin borrower.']
+            )
+            ->assertForbidden();
+        $this->actingAsToken($owner)
+            ->getJson($this->paymentsEndpoint($transaction))
+            ->assertForbidden();
+        $this->actingAsToken($owner)
+            ->get($this->proofEndpoint($transaction, $payment))
+            ->assertForbidden();
+
+        $payment->refresh();
+        $transaction->refresh();
+        $this->assertSame('reported', $payment->payment_status);
+        $this->assertNull($payment->confirmed_by);
+        $this->assertNull($payment->confirmed_at);
+        $this->assertNull($payment->rejected_by);
+        $this->assertNull($payment->rejected_at);
+        $this->assertSame('awaiting_payment_confirmation', $transaction->status);
+    }
+
     public function test_outside_user_cannot_view_history(): void
     {
         [$owner, $borrower, $item, $request, $transaction] = $this->createPaymentFixture();
@@ -698,10 +817,13 @@ class PaymentApiTest extends TestCase
         $this->assertSame([], Storage::disk('public')->allFiles());
     }
 
-    private function createPaymentFixture(): array
+    private function createPaymentFixture(
+        string $ownerRole = 'student',
+        string $borrowerRole = 'student'
+    ): array
     {
-        $owner = $this->createUser();
-        $borrower = $this->createUser();
+        $owner = $this->createUser('active', $ownerRole);
+        $borrower = $this->createUser('active', $borrowerRole);
         $item = $this->createItem($owner);
         $request = $this->createRentalRequest($item, $borrower);
         $negotiation = $this->createNegotiation($request, $borrower);
@@ -710,11 +832,14 @@ class PaymentApiTest extends TestCase
         return [$owner, $borrower, $item, $request, $transaction];
     }
 
-    private function createUser(string $accountStatus = 'active'): User
+    private function createUser(
+        string $accountStatus = 'active',
+        string $role = 'student'
+    ): User
     {
         $user = User::factory()->create();
         $user->account_status = $accountStatus;
-        $user->role = 'student';
+        $user->role = $role;
         $user->save();
 
         return $user;

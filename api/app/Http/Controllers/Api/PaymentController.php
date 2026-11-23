@@ -8,6 +8,7 @@ use App\Http\Requests\Payment\ReportPaymentRequest;
 use App\Http\Resources\PaymentResource;
 use App\Models\Payment;
 use App\Models\RentalTransaction;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -45,6 +46,7 @@ class PaymentController extends Controller
                     ->firstOrFail();
 
                 $user = $request->user();
+                $this->ensureStudentParties($lockedTransaction, true);
                 abort_unless(
                     (string) $lockedTransaction->borrower_id === (string) $user->getAuthIdentifier(),
                     403,
@@ -247,6 +249,8 @@ class PaymentController extends Controller
 
     private function ensureOwner(Request $request, RentalTransaction $transaction): void
     {
+        $this->ensureStudentParties($transaction, true);
+
         abort_unless(
             (string) $transaction->owner_id === (string) $request->user()->getAuthIdentifier(),
             403,
@@ -256,11 +260,35 @@ class PaymentController extends Controller
 
     private function ensurePartyCanView(Request $request, RentalTransaction $transaction): void
     {
+        $this->ensureStudentParties($transaction);
+
         $userId = (string) $request->user()->getAuthIdentifier();
         $isBorrower = (string) $transaction->borrower_id === $userId;
         $isOwner = (string) $transaction->owner_id === $userId;
 
         abort_unless($isBorrower || $isOwner, 403, 'Anda tidak memiliki akses terhadap pembayaran ini.');
+    }
+
+    private function ensureStudentParties(
+        RentalTransaction $transaction,
+        bool $lock = false
+    ): void {
+        $query = User::query()
+            ->whereKey([$transaction->owner_id, $transaction->borrower_id])
+            ->orderBy('id');
+
+        if ($lock) {
+            $query->lockForUpdate();
+        }
+
+        $partyRoles = $query->pluck('role', 'id');
+
+        abort_unless(
+            $partyRoles->get($transaction->owner_id) === 'student'
+                && $partyRoles->get($transaction->borrower_id) === 'student',
+            403,
+            'Kedua pihak transaksi harus ber-role mahasiswa.'
+        );
     }
 
     private function cleanupProof(string $path, int $transactionId): void

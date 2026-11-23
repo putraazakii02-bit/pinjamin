@@ -8,6 +8,7 @@ use App\Http\Resources\RentalRequestResource;
 use App\Models\Item;
 use App\Models\RentalNegotiation;
 use App\Models\RentalRequest;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -17,8 +18,19 @@ class RentalRequestController extends Controller
 {
     public function myRequests(Request $request): AnonymousResourceCollection
     {
+        abort_unless(
+            $request->user()->role === 'student',
+            403,
+            'Hanya mahasiswa yang dapat mengakses Rental Request.'
+        );
+
         $requests = RentalRequest::query()
             ->where('borrower_id', $request->user()->getAuthIdentifier())
+            ->whereHas('item', function ($itemQuery): void {
+                $itemQuery
+                    ->withTrashed()
+                    ->whereHas('owner', fn ($ownerQuery) => $ownerQuery->where('role', 'student'));
+            })
             ->with($this->listingRelations())
             ->orderByDesc('id')
             ->get();
@@ -28,12 +40,19 @@ class RentalRequestController extends Controller
 
     public function incomingRequests(Request $request): AnonymousResourceCollection
     {
+        abort_unless(
+            $request->user()->role === 'student',
+            403,
+            'Hanya mahasiswa yang dapat mengakses Rental Request.'
+        );
+
         $requests = RentalRequest::query()
             ->whereHas('item', function ($itemQuery) use ($request): void {
                 $itemQuery
                     ->withTrashed()
                     ->where('owner_id', $request->user()->getAuthIdentifier());
             })
+            ->whereHas('borrower', fn ($borrowerQuery) => $borrowerQuery->where('role', 'student'))
             ->with($this->listingRelations())
             ->orderByDesc('id')
             ->get();
@@ -59,6 +78,14 @@ class RentalRequestController extends Controller
             ? (string) $rentalRequest->item->owner_id
             : null;
         $userId = (string) $request->user()->getAuthIdentifier();
+
+        abort_unless(
+            $request->user()->role === 'student'
+                && $rentalRequest->borrower?->role === 'student'
+                && $rentalRequest->item?->owner?->role === 'student',
+            403,
+            'Hanya pihak Student yang dapat mengakses Rental Request ini.'
+        );
 
         abort_unless(
             $borrowerId === $userId || $ownerId === $userId,
@@ -100,6 +127,15 @@ class RentalRequestController extends Controller
                 ->firstOrFail();
 
             abort_unless($lockedItem->listing_status === 'active', 404);
+            $owner = User::query()
+                ->whereKey($lockedItem->owner_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            abort_unless(
+                $owner->role === 'student',
+                403,
+                'Barang milik Admin tidak dapat diminta untuk dipinjam.'
+            );
             abort_unless(
                 (string) $lockedItem->owner_id !== (string) $borrower->getAuthIdentifier(),
                 403,
@@ -158,6 +194,26 @@ class RentalRequestController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $lockedItem = Item::withTrashed()
+                ->whereKey($lockedRequest->item_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+            $partyRoles = User::query()
+                ->whereKey([$lockedRequest->borrower_id, $lockedItem->owner_id])
+                ->orderBy('id')
+                ->lockForUpdate()
+                ->pluck('role', 'id');
+
+            abort_unless(
+                $partyRoles->get($lockedRequest->borrower_id) === 'student',
+                403,
+                'Hanya mahasiswa peminjam yang dapat membatalkan Rental Request.'
+            );
+            abort_unless(
+                $partyRoles->get($lockedItem->owner_id) === 'student',
+                403,
+                'Pemilik barang harus ber-role mahasiswa.'
+            );
             abort_unless(
                 (string) $lockedRequest->borrower_id === (string) $borrower->getAuthIdentifier(),
                 403,

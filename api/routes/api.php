@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ItemImageController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\RentalNegotiationController;
 use App\Http\Controllers\Api\RentalRequestController;
+use App\Http\Controllers\Api\RentalTransactionHandoverController;
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
 
 Route::get('/categories', [CategoryController::class, 'index']);
@@ -42,6 +43,14 @@ Route::middleware(['auth:sanctum', 'active.account'])
         Route::patch('/rental-transactions/{transaction}/payments/{payment}/reject', [PaymentController::class, 'reject']);
         Route::get('/rental-transactions/{transaction}/payments/{payment}/proof', [PaymentController::class, 'proof'])
             ->name('api.payments.proof');
+        Route::patch(
+            '/rental-transactions/{transaction}/handover/owner-confirm',
+            [RentalTransactionHandoverController::class, 'confirmOwnerHandover']
+        );
+        Route::patch(
+            '/rental-transactions/{transaction}/handover/borrower-confirm',
+            [RentalTransactionHandoverController::class, 'confirmBorrowerReceipt']
+        );
         Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/accept', [RentalNegotiationController::class, 'accept']);
         Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/counter', [RentalNegotiationController::class, 'counter']);
         Route::patch('/rental-requests/{rentalRequest}/negotiations/{negotiation}/reject', [RentalNegotiationController::class, 'reject']);

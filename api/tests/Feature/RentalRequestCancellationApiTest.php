@@ -75,6 +75,61 @@ class RentalRequestCancellationApiTest extends TestCase
             ->assertJsonPath('data.status', 'cancelled');
     }
 
+    public function test_admin_borrower_cannot_cancel_request_or_change_its_data(): void
+    {
+        [$owner, $borrower, $item, $request, $negotiation] = $this->createRequestWithOffer(
+            'student',
+            'admin'
+        );
+
+        $this->actingAsToken($borrower)
+            ->patchJson($this->cancelEndpoint($request))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('rental_requests', [
+            'id' => $request->id,
+            'status' => 'pending',
+            'cancelled_at' => null,
+        ], 'mysql');
+        $this->assertDatabaseHas('rental_negotiations', [
+            'id' => $negotiation->id,
+            'status' => 'pending',
+            'responded_by' => null,
+        ], 'mysql');
+        $this->assertDatabaseMissing('rental_transactions', [
+            'request_id' => $request->id,
+        ], 'mysql');
+    }
+
+    public function test_request_with_admin_owner_cannot_be_cancelled_by_either_party(): void
+    {
+        [$owner, $borrower, $item, $request, $negotiation] = $this->createRequestWithOffer(
+            'admin',
+            'student'
+        );
+
+        $this->actingAsToken($owner)
+            ->patchJson($this->cancelEndpoint($request))
+            ->assertForbidden();
+        $this->actingAsToken($borrower)
+            ->patchJson($this->cancelEndpoint($request))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('rental_requests', [
+            'id' => $request->id,
+            'status' => 'pending',
+            'cancelled_at' => null,
+        ], 'mysql');
+        $this->assertDatabaseHas('rental_negotiations', [
+            'id' => $negotiation->id,
+            'status' => 'pending',
+            'responded_by' => null,
+        ], 'mysql');
+        $this->assertDatabaseMissing('rental_transactions', [
+            'request_id' => $request->id,
+        ], 'mysql');
+    }
+
     public function test_owner_cannot_cancel_request(): void
     {
         [$owner, $borrower, $item, $request, $negotiation] = $this->createRequestWithOffer();
@@ -269,10 +324,13 @@ class RentalRequestCancellationApiTest extends TestCase
             ->assertConflict();
     }
 
-    private function createRequestWithOffer(): array
+    private function createRequestWithOffer(
+        string $ownerRole = 'student',
+        string $borrowerRole = 'student'
+    ): array
     {
-        $owner = $this->createUser();
-        $borrower = $this->createUser();
+        $owner = $this->createUser('active', $ownerRole);
+        $borrower = $this->createUser('active', $borrowerRole);
         $item = $this->createItem($owner);
         $request = $this->createRequest($item, $borrower);
         $negotiation = $this->createNegotiation($request, $borrower, 'pending');
@@ -280,11 +338,14 @@ class RentalRequestCancellationApiTest extends TestCase
         return [$owner, $borrower, $item, $request, $negotiation];
     }
 
-    private function createUser(string $accountStatus = 'active'): User
+    private function createUser(
+        string $accountStatus = 'active',
+        string $role = 'student'
+    ): User
     {
         $user = User::factory()->create();
         $user->account_status = $accountStatus;
-        $user->role = 'student';
+        $user->role = $role;
         $user->save();
 
         return $user;

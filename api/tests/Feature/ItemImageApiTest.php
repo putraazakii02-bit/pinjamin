@@ -76,6 +76,36 @@ class ItemImageApiTest extends TestCase
         $this->assertSame(0, $item->images()->count());
     }
 
+    public function test_admin_owner_cannot_upload_delete_or_select_item_images(): void
+    {
+        $admin = $this->createUser('active', 'admin');
+        $item = $this->createItem($admin);
+        $primary = $this->createImage($item, 'items/'.$item->id.'/primary.jpg', 0, true);
+        $secondary = $this->createImage($item, 'items/'.$item->id.'/secondary.jpg', 1);
+        $token = $admin->createToken('item-image-test')->plainTextToken;
+
+        $this->withToken($token)
+            ->post('/api/items/'.$item->id.'/images', [
+                'images' => [$this->fakeImage('admin-upload.jpg')],
+            ], ['Accept' => 'application/json'])
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->patchJson('/api/items/'.$item->id.'/images/'.$secondary->id.'/primary')
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->deleteJson('/api/items/'.$item->id.'/images/'.$primary->id)
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('item_images', ['id' => $primary->id], 'mysql');
+        $this->assertDatabaseHas('item_images', ['id' => $secondary->id], 'mysql');
+        $this->assertTrue($primary->fresh()->is_primary);
+        $this->assertFalse($secondary->fresh()->is_primary);
+        $this->assertSame(2, $item->images()->count());
+        Storage::disk('local')->assertDirectoryEmpty('items/'.$item->id);
+    }
+
     public function test_owner_can_upload_jpg_image(): void
     {
         $owner = $this->createUser();
@@ -713,10 +743,11 @@ class ItemImageApiTest extends TestCase
         $this->assertTrue($localDisk->exists($image->image_path));
     }
 
-    private function createUser(string $accountStatus = 'active'): User
+    private function createUser(string $accountStatus = 'active', string $role = 'student'): User
     {
         $user = User::factory()->create();
         $user->account_status = $accountStatus;
+        $user->role = $role;
         $user->save();
 
         return $user;

@@ -182,6 +182,80 @@ class RentalNegotiationResponseApiTest extends TestCase
         ], 'mysql');
     }
 
+    public function test_admin_owner_cannot_counter_accept_or_reject_negotiation(): void
+    {
+        [$owner, $borrower, $item, $request, $negotiation] = $this->createPendingOffer('admin');
+        $token = $owner->createToken('negotiation-response-test')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson(
+                $this->counterEndpoint($request, $negotiation),
+                $this->counterPayload(27.75, 25)
+            )
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->patchJson($this->acceptEndpoint($request, $negotiation))
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->patchJson($this->rejectEndpoint($request, $negotiation))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('rental_requests', [
+            'id' => $request->id,
+            'status' => 'pending',
+        ], 'mysql');
+        $this->assertDatabaseHas('rental_negotiations', [
+            'id' => $negotiation->id,
+            'status' => 'pending',
+            'responded_by' => null,
+        ], 'mysql');
+        $this->assertDatabaseMissing('rental_transactions', [
+            'request_id' => $request->id,
+        ], 'mysql');
+    }
+
+    public function test_admin_borrower_cannot_counter_accept_or_reject_negotiation(): void
+    {
+        [$owner, $borrower, $item, $request, $negotiation] = $this->createPendingOffer(
+            'student',
+            'admin'
+        );
+        $negotiation->proposer_id = $owner->id;
+        $negotiation->save();
+        $token = $borrower->createToken('negotiation-response-test')->plainTextToken;
+
+        $this->withToken($token)
+            ->patchJson(
+                $this->counterEndpoint($request, $negotiation),
+                $this->counterPayload(27.75, 25)
+            )
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->patchJson($this->acceptEndpoint($request, $negotiation))
+            ->assertForbidden();
+
+        $this->withToken($token)
+            ->patchJson($this->rejectEndpoint($request, $negotiation))
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('rental_requests', [
+            'id' => $request->id,
+            'status' => 'pending',
+        ], 'mysql');
+        $this->assertDatabaseHas('rental_negotiations', [
+            'id' => $negotiation->id,
+            'status' => 'pending',
+            'proposer_id' => $owner->id,
+            'responded_by' => null,
+        ], 'mysql');
+        $this->assertDatabaseMissing('rental_transactions', [
+            'request_id' => $request->id,
+        ], 'mysql');
+    }
+
     public function test_sender_cannot_accept_initial_offer(): void
     {
         [$owner, $borrower, $item, $request, $negotiation] = $this->createPendingOffer();
@@ -446,10 +520,13 @@ class RentalNegotiationResponseApiTest extends TestCase
         ], 'mysql');
     }
 
-    private function createPendingOffer(): array
+    private function createPendingOffer(
+        string $ownerRole = 'student',
+        string $borrowerRole = 'student'
+    ): array
     {
-        $owner = $this->createUser();
-        $borrower = $this->createUser();
+        $owner = $this->createUser('active', $ownerRole);
+        $borrower = $this->createUser('active', $borrowerRole);
         $item = $this->createItem($owner);
         $request = $this->createRentalRequest($item, $borrower);
         $negotiation = $this->createNegotiation($request, $borrower, 'pending', 25.50, 24);
@@ -457,11 +534,14 @@ class RentalNegotiationResponseApiTest extends TestCase
         return [$owner, $borrower, $item, $request, $negotiation];
     }
 
-    private function createUser(string $accountStatus = 'active'): User
+    private function createUser(
+        string $accountStatus = 'active',
+        string $role = 'student'
+    ): User
     {
         $user = User::factory()->create();
         $user->account_status = $accountStatus;
-        $user->role = 'student';
+        $user->role = $role;
         $user->save();
 
         return $user;
