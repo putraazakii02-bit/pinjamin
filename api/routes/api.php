@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\RentalNegotiationController;
 use App\Http\Controllers\Api\RentalRequestController;
 use App\Http\Controllers\Api\RentalTransactionHandoverController;
+use App\Http\Controllers\Api\RentalTransactionQueryController;
 use App\Http\Controllers\Api\RentalTransactionReturnController;
 use App\Http\Controllers\Api\Admin\CategoryController as AdminCategoryController;
 
@@ -38,6 +39,9 @@ Route::middleware(['auth:sanctum', 'active.account'])
         Route::get('/incoming/rental-requests', [RentalRequestController::class, 'incomingRequests']);
         Route::get('/rental-requests/{rentalRequest}', [RentalRequestController::class, 'show']);
         Route::patch('/rental-requests/{rentalRequest}/cancel', [RentalRequestController::class, 'cancel']);
+        Route::get('/my/rental-transactions', [RentalTransactionQueryController::class, 'myTransactions']);
+        Route::get('/incoming/rental-transactions', [RentalTransactionQueryController::class, 'incomingTransactions']);
+        Route::get('/rental-transactions/{transaction}', [RentalTransactionQueryController::class, 'show']);
         Route::get('/rental-transactions/{transaction}/payments', [PaymentController::class, 'index']);
         Route::post('/rental-transactions/{transaction}/payments', [PaymentController::class, 'store']);
         Route::patch('/rental-transactions/{transaction}/payments/{payment}/confirm', [PaymentController::class, 'confirm']);
