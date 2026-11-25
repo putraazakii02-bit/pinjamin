@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Rental;
 
+use App\Support\RentalPriceCalculator;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
@@ -53,10 +54,9 @@ class CounterRentalNegotiationRequest extends FormRequest
                 return;
             }
 
-            $startMicroseconds = $this->toMicroseconds($start);
-            $dueMicroseconds = $this->toMicroseconds($due);
+            $durationMicroseconds = RentalPriceCalculator::durationMicroseconds($start, $due);
 
-            if ($dueMicroseconds <= $startMicroseconds) {
+            if ($durationMicroseconds <= 0) {
                 $validator->errors()->add(
                     'proposed_due_at',
                     'Waktu pengembalian harus lebih besar daripada waktu mulai.'
@@ -65,7 +65,7 @@ class CounterRentalNegotiationRequest extends FormRequest
                 return;
             }
 
-            if (($dueMicroseconds - $startMicroseconds) < 86_400_000_000) {
+            if ($durationMicroseconds < RentalPriceCalculator::MICROSECONDS_PER_DAY) {
                 $validator->errors()->add(
                     'proposed_due_at',
                     'Durasi peminjaman minimal 24 jam penuh.'
@@ -88,10 +88,5 @@ class CounterRentalNegotiationRequest extends FormRequest
 
         return CarbonImmutable::parse((string) $this->validated('proposed_due_at'), $timezone)
             ->setTimezone($timezone);
-    }
-
-    private function toMicroseconds(CarbonImmutable $value): int
-    {
-        return ($value->getTimestamp() * 1_000_000) + $value->micro;
     }
 }

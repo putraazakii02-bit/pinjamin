@@ -7,6 +7,8 @@ use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\ItemController;
 use App\Http\Controllers\Api\ItemImageController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\RentalExtensionController;
+use App\Http\Controllers\Api\RentalExtensionPaymentController;
 use App\Http\Controllers\Api\RentalNegotiationController;
 use App\Http\Controllers\Api\RentalRequestController;
 use App\Http\Controllers\Api\RentalTransactionHandoverController;
@@ -42,6 +44,35 @@ Route::middleware(['auth:sanctum', 'active.account'])
         Route::get('/my/rental-transactions', [RentalTransactionQueryController::class, 'myTransactions']);
         Route::get('/incoming/rental-transactions', [RentalTransactionQueryController::class, 'incomingTransactions']);
         Route::get('/rental-transactions/{transaction}', [RentalTransactionQueryController::class, 'show']);
+        Route::post('/rental-transactions/{transaction}/extensions', [RentalExtensionController::class, 'store']);
+        Route::patch(
+            '/rental-transactions/{transaction}/extensions/{extension}/accept',
+            [RentalExtensionController::class, 'accept']
+        );
+        Route::patch(
+            '/rental-transactions/{transaction}/extensions/{extension}/reject',
+            [RentalExtensionController::class, 'reject']
+        );
+        Route::patch(
+            '/rental-transactions/{transaction}/extensions/{extension}/withdraw',
+            [RentalExtensionController::class, 'withdraw']
+        );
+        Route::get(
+            '/rental-transactions/{transaction}/extensions',
+            [RentalExtensionController::class, 'index']
+        );
+        Route::post(
+            '/rental-transactions/{transaction}/extensions/{extension}/payments',
+            [RentalExtensionPaymentController::class, 'store']
+        );
+        Route::patch(
+            '/rental-transactions/{transaction}/extensions/{extension}/payments/{payment}/confirm',
+            [RentalExtensionPaymentController::class, 'confirm']
+        );
+        Route::patch(
+            '/rental-transactions/{transaction}/extensions/{extension}/payments/{payment}/reject',
+            [RentalExtensionPaymentController::class, 'reject']
+        );
         Route::get('/rental-transactions/{transaction}/payments', [PaymentController::class, 'index']);
         Route::post('/rental-transactions/{transaction}/payments', [PaymentController::class, 'store']);
         Route::patch('/rental-transactions/{transaction}/payments/{payment}/confirm', [PaymentController::class, 'confirm']);

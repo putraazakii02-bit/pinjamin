@@ -243,6 +243,7 @@ class PaymentController extends Controller
     ): Payment {
         return $transaction->payments()
             ->whereKey($payment->getKey())
+            ->where('payment_type', 'rental_fee')
             ->lockForUpdate()
             ->firstOrFail();
     }

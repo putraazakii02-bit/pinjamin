@@ -10,6 +10,7 @@ use App\Models\RentalNegotiation;
 use App\Models\RentalRequest;
 use App\Models\RentalTransaction;
 use App\Models\User;
+use App\Support\RentalPriceCalculator;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -17,9 +18,6 @@ use Illuminate\Validation\ValidationException;
 
 class RentalNegotiationController extends Controller
 {
-    private const MICROSECONDS_PER_DAY = 86_400_000_000;
-    private const MAX_DECIMAL_CENTS = 999_999_999_999;
-
     public function counter(
         CounterRentalNegotiationRequest $request,
         RentalRequest $rentalRequest,
@@ -62,11 +60,13 @@ class RentalNegotiationController extends Controller
             $start = $request->normalizedStart();
             $due = $request->normalizedDue();
 
-            $dailyCents = $this->decimalToCents((string) $validated['proposed_daily_price']);
-            $durationDays = $this->calculateDurationDays($start, $due);
+            $dailyCents = RentalPriceCalculator::decimalToCents(
+                (string) $validated['proposed_daily_price']
+            );
+            $durationDays = RentalPriceCalculator::calculateDurationDays($start, $due);
             $totalCents = $dailyCents * $durationDays;
 
-            if ($totalCents > self::MAX_DECIMAL_CENTS) {
+            if ($totalCents > RentalPriceCalculator::MAX_DECIMAL_CENTS) {
                 throw ValidationException::withMessages([
                     'proposed_daily_price' => 'Total harga melebihi kapasitas decimal(12,2).',
                 ]);
@@ -158,18 +158,20 @@ class RentalNegotiationController extends Controller
             $timezone = config('app.timezone');
             $start = CarbonImmutable::parse($pending->proposed_start_at, $timezone);
             $due = CarbonImmutable::parse($pending->proposed_due_at, $timezone);
-            $durationMicroseconds = $this->toMicroseconds($due) - $this->toMicroseconds($start);
+            $durationMicroseconds = RentalPriceCalculator::durationMicroseconds($start, $due);
             abort_unless(
-                $durationMicroseconds >= self::MICROSECONDS_PER_DAY,
+                $durationMicroseconds >= RentalPriceCalculator::MICROSECONDS_PER_DAY,
                 422,
                 'Durasi peminjaman minimal 24 jam penuh.'
             );
-            $dailyCents = $this->decimalToCents((string) $pending->proposed_daily_price);
-            $durationDays = $this->calculateDurationDays($start, $due);
+            $dailyCents = RentalPriceCalculator::decimalToCents(
+                (string) $pending->proposed_daily_price
+            );
+            $durationDays = RentalPriceCalculator::calculateDurationDays($start, $due);
             $totalCents = $dailyCents * $durationDays;
 
             abort_unless(
-                $totalCents <= self::MAX_DECIMAL_CENTS,
+                $totalCents <= RentalPriceCalculator::MAX_DECIMAL_CENTS,
                 422,
                 'Total harga melebihi kapasitas decimal(12,2).'
             );
@@ -179,8 +181,8 @@ class RentalNegotiationController extends Controller
                 'item_id' => $item->id,
                 'owner_id' => $item->owner_id,
                 'borrower_id' => $lockedRequest->borrower_id,
-                'agreed_daily_price' => $this->formatCents($dailyCents),
-                'total_price' => $this->formatCents($totalCents),
+                'agreed_daily_price' => RentalPriceCalculator::formatCents($dailyCents),
+                'total_price' => RentalPriceCalculator::formatCents($totalCents),
                 'start_at' => $start,
                 'due_at' => $due,
             ]);
@@ -308,34 +310,5 @@ class RentalNegotiationController extends Controller
             403,
             'Pengirim penawaran tidak dapat merespons penawarannya sendiri.'
         );
-    }
-
-    private function decimalToCents(string $value): int
-    {
-        [$whole, $fraction] = array_pad(explode('.', $value, 2), 2, '');
-        $fraction = str_pad($fraction, 2, '0');
-
-        return ((int) $whole * 100) + (int) $fraction;
-    }
-
-    private function formatCents(int $cents): string
-    {
-        return intdiv($cents, 100) . '.' . str_pad((string) ($cents % 100), 2, '0', STR_PAD_LEFT);
-    }
-
-    private function calculateDurationDays(
-        CarbonImmutable $start,
-        CarbonImmutable $due
-    ): int {
-        $difference = $this->toMicroseconds($due) - $this->toMicroseconds($start);
-        $quotient = intdiv($difference, self::MICROSECONDS_PER_DAY);
-        $remainder = $difference % self::MICROSECONDS_PER_DAY;
-
-        return $remainder === 0 ? $quotient : $quotient + 1;
-    }
-
-    private function toMicroseconds(CarbonImmutable $value): int
-    {
-        return ($value->getTimestamp() * 1_000_000) + $value->micro;
     }
 }
